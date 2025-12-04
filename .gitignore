@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Playwright MCP testing artifacts
+.playwright-mcp/
+
+# Reference images used during development
+reference/
