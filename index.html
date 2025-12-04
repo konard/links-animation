@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Links Animation - How it all began</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+        }
+
+        .panel {
+            width: 50%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .panel-left {
+            background: #000;
+        }
+
+        .panel-right {
+            background: #fff;
+        }
+
+        svg {
+            width: 80%;
+            height: 80%;
+            max-width: 400px;
+            max-height: 400px;
+        }
+
+        /* Animation classes */
+        .fade-in {
+            opacity: 0;
+            animation: fadeIn 1s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .draw-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawLine 1s ease-out forwards;
+        }
+
+        @keyframes drawLine {
+            to { stroke-dashoffset: 0; }
+        }
+
+        .draw-circle {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawCircle 1s ease-out forwards;
+        }
+
+        @keyframes drawCircle {
+            to { stroke-dashoffset: 0; }
+        }
+
+        .scale-in {
+            transform-origin: center;
+            transform: scale(0);
+            animation: scaleIn 0.8s ease-out forwards;
+        }
+
+        @keyframes scaleIn {
+            to { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel panel-left">
+            <svg id="svg-left" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left panel SVG content (white on black) -->
+            </svg>
+        </div>
+        <div class="panel panel-right">
+            <svg id="svg-right" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                <!-- Right panel SVG content (black on white) -->
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        // Animation configuration
+        const FRAME_DURATION = 2500; // Duration of each frame in ms
+        const TRANSITION_DURATION = 1000; // Duration of transitions in ms
+
+        // SVG elements
+        const svgLeft = document.getElementById('svg-left');
+        const svgRight = document.getElementById('svg-right');
+
+        // Helper function to create SVG elements
+        function createSvgElement(tag, attributes = {}) {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            for (const [key, value] of Object.entries(attributes)) {
+                el.setAttribute(key, value);
+            }
+            return el;
+        }
+
+        // Helper function to animate element appearance
+        function animateAppearance(element, delay = 0) {
+            element.style.opacity = '0';
+            element.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+            setTimeout(() => {
+                element.style.opacity = '1';
+            }, delay);
+        }
+
+        // Helper function to animate line drawing
+        function animateLineDraw(element, delay = 0) {
+            // Use a fixed length since getTotalLength requires element to be in DOM
+            const length = 500;
+            element.style.strokeDasharray = length;
+            element.style.strokeDashoffset = length;
+            element.style.transition = `stroke-dashoffset ${TRANSITION_DURATION}ms ease-out`;
+            setTimeout(() => {
+                element.style.strokeDashoffset = '0';
+            }, delay);
+        }
+
+        // Helper function to create a dot/point
+        function createDot(cx, cy, r, fill) {
+            return createSvgElement('circle', {
+                cx, cy, r, fill,
+                'transform-origin': `${cx}px ${cy}px`
+            });
+        }
+
+        // Helper function to create a circle (outline)
+        function createCircle(cx, cy, r, stroke, strokeWidth = 3) {
+            return createSvgElement('circle', {
+                cx, cy, r,
+                fill: 'none',
+                stroke,
+                'stroke-width': strokeWidth
+            });
+        }
+
+        // Helper function to create a line
+        function createLine(x1, y1, x2, y2, stroke, strokeWidth = 3) {
+            return createSvgElement('line', {
+                x1, y1, x2, y2, stroke, 'stroke-width': strokeWidth
+            });
+        }
+
+        // Helper function to create an arrow
+        function createArrow(x1, y1, x2, y2, stroke, strokeWidth = 3) {
+            const group = createSvgElement('g');
+            const line = createLine(x1, y1, x2, y2, stroke, strokeWidth);
+
+            // Arrow head
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const headLength = 12;
+            const head = createSvgElement('path', {
+                d: `M ${x2} ${y2} L ${x2 - headLength * Math.cos(angle - Math.PI/6)} ${y2 - headLength * Math.sin(angle - Math.PI/6)} M ${x2} ${y2} L ${x2 - headLength * Math.cos(angle + Math.PI/6)} ${y2 - headLength * Math.sin(angle + Math.PI/6)}`,
+                stroke,
+                'stroke-width': strokeWidth,
+                fill: 'none'
+            });
+
+            group.appendChild(line);
+            group.appendChild(head);
+            return group;
+        }
+
+        // Helper function to create a connection (two circles with line)
+        function createConnection(x1, y1, x2, y2, r, stroke, strokeWidth = 3, hasArrow = false) {
+            const group = createSvgElement('g');
+
+            const circle1 = createCircle(x1, y1, r, stroke, strokeWidth);
+            const circle2 = createCircle(x2, y2, r, stroke, strokeWidth);
+
+            // Line connects from edge of circle1 to edge of circle2
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const lineX1 = x1 + r * Math.cos(angle);
+            const lineY1 = y1 + r * Math.sin(angle);
+            const lineX2 = x2 - r * Math.cos(angle);
+            const lineY2 = y2 - r * Math.sin(angle);
+
+            if (hasArrow) {
+                const arrow = createArrow(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(arrow);
+            } else {
+                const line = createLine(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(line);
+            }
+
+            group.appendChild(circle1);
+            group.appendChild(circle2);
+            return group;
+        }
+
+        // Helper function to create a typed link (3 nodes in Y formation)
+        function createTypedLink(cx, cy, size, stroke, strokeWidth = 3) {
+            const group = createSvgElement('g');
+            const r = size * 0.18;
+
+            // Positions for the 3 nodes
+            const topLeftX = cx - size * 0.35;
+            const topLeftY = cy - size * 0.25;
+            const topRightX = cx + size * 0.35;
+            const topRightY = cy - size * 0.25;
+            const bottomX = cx;
+            const bottomY = cy + size * 0.35;
+
+            // Lines from bottom to top nodes (with arrows)
+            const arrow1 = createArrow(bottomX, bottomY - r, topLeftX + r * 0.7, topLeftY + r * 0.7, stroke, strokeWidth);
+            const arrow2 = createArrow(bottomX, bottomY - r, topRightX - r * 0.7, topRightY + r * 0.7, stroke, strokeWidth);
+
+            group.appendChild(arrow1);
+            group.appendChild(arrow2);
+
+            // Circles
+            const circle1 = createCircle(topLeftX, topLeftY, r, stroke, strokeWidth);
+            const circle2 = createCircle(topRightX, topRightY, r, stroke, strokeWidth);
+            const circle3 = createCircle(bottomX, bottomY, r, stroke, strokeWidth);
+
+            group.appendChild(circle1);
+            group.appendChild(circle2);
+            group.appendChild(circle3);
+
+            return group;
+        }
+
+        // Helper to create nested link structure (for recursion)
+        function createNestedLink(cx, cy, r, stroke, strokeWidth, depth, innerStroke) {
+            const group = createSvgElement('g');
+            const outerCircle = createCircle(cx, cy, r, stroke, strokeWidth);
+            group.appendChild(outerCircle);
+
+            if (depth > 0) {
+                // Create inner structure - two small circles with connector
+                const innerR = r * 0.25;
+                const innerY = cy;
+                const leftX = cx - r * 0.4;
+                const rightX = cx + r * 0.4;
+
+                if (depth === 1) {
+                    const leftCircle = createCircle(leftX, innerY, innerR, innerStroke, strokeWidth * 0.6);
+                    const rightCircle = createCircle(rightX, innerY, innerR, innerStroke, strokeWidth * 0.6);
+                    const connector = createLine(leftX + innerR, innerY, rightX - innerR, innerY, innerStroke, strokeWidth * 0.6);
+                    group.appendChild(connector);
+                    group.appendChild(leftCircle);
+                    group.appendChild(rightCircle);
+                } else {
+                    // Deeper recursion - add even smaller nested structures
+                    const nestedLeft = createNestedLink(leftX, innerY, innerR, innerStroke, strokeWidth * 0.6, depth - 1, innerStroke);
+                    const nestedRight = createNestedLink(rightX, innerY, innerR, innerStroke, strokeWidth * 0.6, depth - 1, innerStroke);
+                    const connector = createLine(leftX + innerR, innerY, rightX - innerR, innerY, innerStroke, strokeWidth * 0.6);
+                    group.appendChild(connector);
+                    group.appendChild(nestedLeft);
+                    group.appendChild(nestedRight);
+                }
+            }
+
+            return group;
+        }
+
+        // Helper to create typed link with nested structure
+        function createTypedLinkNested(cx, cy, size, stroke, strokeWidth, depth) {
+            const group = createSvgElement('g');
+            const r = size * 0.18;
+            const innerStroke = stroke;
+
+            // Positions
+            const topLeftX = cx - size * 0.35;
+            const topLeftY = cy - size * 0.25;
+            const topRightX = cx + size * 0.35;
+            const topRightY = cy - size * 0.25;
+            const bottomX = cx;
+            const bottomY = cy + size * 0.35;
+
+            // Arrows
+            const arrow1 = createArrow(bottomX, bottomY - r, topLeftX + r * 0.7, topLeftY + r * 0.7, stroke, strokeWidth);
+            const arrow2 = createArrow(bottomX, bottomY - r, topRightX - r * 0.7, topRightY + r * 0.7, stroke, strokeWidth);
+            group.appendChild(arrow1);
+            group.appendChild(arrow2);
+
+            // Nested circles
+            const nested1 = createNestedLink(topLeftX, topLeftY, r, stroke, strokeWidth, depth, innerStroke);
+            const nested2 = createNestedLink(topRightX, topRightY, r, stroke, strokeWidth, depth, innerStroke);
+            const nested3 = createNestedLink(bottomX, bottomY, r, stroke, strokeWidth, depth, innerStroke);
+
+            group.appendChild(nested1);
+            group.appendChild(nested2);
+            group.appendChild(nested3);
+
+            return group;
+        }
+
+        // Helper to create connection with nested structure
+        function createConnectionNested(x1, y1, x2, y2, r, stroke, strokeWidth, hasArrow, depth) {
+            const group = createSvgElement('g');
+            const innerStroke = stroke;
+
+            // Line connects from edge
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const lineX1 = x1 + r * Math.cos(angle);
+            const lineY1 = y1 + r * Math.sin(angle);
+            const lineX2 = x2 - r * Math.cos(angle);
+            const lineY2 = y2 - r * Math.sin(angle);
+
+            if (hasArrow) {
+                const arrow = createArrow(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(arrow);
+            } else {
+                const line = createLine(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(line);
+            }
+
+            const nested1 = createNestedLink(x1, y1, r, stroke, strokeWidth, depth, innerStroke);
+            const nested2 = createNestedLink(x2, y2, r, stroke, strokeWidth, depth, innerStroke);
+
+            group.appendChild(nested1);
+            group.appendChild(nested2);
+            return group;
+        }
+
+        // Create colored dots inside nested structure
+        function createNestedLinkColored(cx, cy, r, stroke, strokeWidth, depth, colors, colorIndex = 0) {
+            const group = createSvgElement('g');
+            const outerCircle = createCircle(cx, cy, r, stroke, strokeWidth);
+            group.appendChild(outerCircle);
+
+            if (depth > 0) {
+                const innerR = r * 0.25;
+                const innerY = cy;
+                const leftX = cx - r * 0.4;
+                const rightX = cx + r * 0.4;
+
+                if (depth === 1) {
+                    // At deepest level, add colored dots
+                    const leftDot = createDot(leftX, innerY, innerR * 0.6, colors[colorIndex % colors.length]);
+                    const rightDot = createDot(rightX, innerY, innerR * 0.6, colors[(colorIndex + 1) % colors.length]);
+                    const leftCircle = createCircle(leftX, innerY, innerR, stroke, strokeWidth * 0.6);
+                    const rightCircle = createCircle(rightX, innerY, innerR, stroke, strokeWidth * 0.6);
+                    const connector = createLine(leftX + innerR, innerY, rightX - innerR, innerY, stroke, strokeWidth * 0.6);
+                    group.appendChild(connector);
+                    group.appendChild(leftDot);
+                    group.appendChild(rightDot);
+                    group.appendChild(leftCircle);
+                    group.appendChild(rightCircle);
+                } else {
+                    const nestedLeft = createNestedLinkColored(leftX, innerY, innerR, stroke, strokeWidth * 0.6, depth - 1, colors, colorIndex);
+                    const nestedRight = createNestedLinkColored(rightX, innerY, innerR, stroke, strokeWidth * 0.6, depth - 1, colors, colorIndex + 2);
+                    const connector = createLine(leftX + innerR, innerY, rightX - innerR, innerY, stroke, strokeWidth * 0.6);
+                    group.appendChild(connector);
+                    group.appendChild(nestedLeft);
+                    group.appendChild(nestedRight);
+                }
+            }
+
+            return group;
+        }
+
+        function createTypedLinkColored(cx, cy, size, stroke, strokeWidth, depth) {
+            const group = createSvgElement('g');
+            const r = size * 0.18;
+            const colors = ['#ff1493', '#ffa500', '#00ff00', '#00bfff', '#8b00ff', '#ff4500', '#00ced1', '#ff69b4'];
+
+            const topLeftX = cx - size * 0.35;
+            const topLeftY = cy - size * 0.25;
+            const topRightX = cx + size * 0.35;
+            const topRightY = cy - size * 0.25;
+            const bottomX = cx;
+            const bottomY = cy + size * 0.35;
+
+            const arrow1 = createArrow(bottomX, bottomY - r, topLeftX + r * 0.7, topLeftY + r * 0.7, stroke, strokeWidth);
+            const arrow2 = createArrow(bottomX, bottomY - r, topRightX - r * 0.7, topRightY + r * 0.7, stroke, strokeWidth);
+            group.appendChild(arrow1);
+            group.appendChild(arrow2);
+
+            const nested1 = createNestedLinkColored(topLeftX, topLeftY, r, stroke, strokeWidth, depth, colors, 0);
+            const nested2 = createNestedLinkColored(topRightX, topRightY, r, stroke, strokeWidth, depth, colors, 2);
+            const nested3 = createNestedLinkColored(bottomX, bottomY, r, stroke, strokeWidth, depth, colors, 4);
+
+            group.appendChild(nested1);
+            group.appendChild(nested2);
+            group.appendChild(nested3);
+
+            return group;
+        }
+
+        function createConnectionColored(x1, y1, x2, y2, r, stroke, strokeWidth, hasArrow, depth) {
+            const group = createSvgElement('g');
+            const colors = ['#ff1493', '#ffa500', '#00ff00', '#00bfff', '#8b00ff', '#ff4500', '#00ced1', '#ff69b4'];
+
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const lineX1 = x1 + r * Math.cos(angle);
+            const lineY1 = y1 + r * Math.sin(angle);
+            const lineX2 = x2 - r * Math.cos(angle);
+            const lineY2 = y2 - r * Math.sin(angle);
+
+            if (hasArrow) {
+                const arrow = createArrow(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(arrow);
+            } else {
+                const line = createLine(lineX1, lineY1, lineX2, lineY2, stroke, strokeWidth);
+                group.appendChild(line);
+            }
+
+            const nested1 = createNestedLinkColored(x1, y1, r, stroke, strokeWidth, depth, colors, 0);
+            const nested2 = createNestedLinkColored(x2, y2, r, stroke, strokeWidth, depth, colors, 4);
+
+            group.appendChild(nested1);
+            group.appendChild(nested2);
+            return group;
+        }
+
+        // Frame definitions
+        const frames = [
+            // Frame 1: Emptiness (just the panels)
+            {
+                left: () => null,
+                right: () => null
+            },
+            // Frame 2: Point (black dot on white side only)
+            {
+                left: () => null,
+                right: () => {
+                    const dot = createDot(100, 100, 8, '#000');
+                    dot.style.transform = 'scale(0)';
+                    dot.style.transformOrigin = '100px 100px';
+                    dot.style.transition = `transform ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => dot.style.transform = 'scale(1)', 50);
+                    return dot;
+                }
+            },
+            // Frame 3: Duality (white dot on black, black dot on white)
+            {
+                left: () => {
+                    const dot = createDot(100, 100, 8, '#fff');
+                    dot.style.transform = 'scale(0)';
+                    dot.style.transformOrigin = '100px 100px';
+                    dot.style.transition = `transform ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => dot.style.transform = 'scale(1)', 50);
+                    return dot;
+                },
+                right: () => {
+                    const dot = createDot(100, 100, 8, '#000');
+                    return dot;
+                }
+            },
+            // Frame 4: Line (two dots on left, vertical line on right)
+            {
+                left: () => {
+                    const group = createSvgElement('g');
+                    const dot1 = createDot(100, 50, 8, '#fff');
+                    const dot2 = createDot(100, 150, 8, '#fff');
+                    group.appendChild(dot1);
+                    group.appendChild(dot2);
+                    return group;
+                },
+                right: () => {
+                    const line = createLine(100, 50, 100, 150, '#000', 3);
+                    animateLineDraw(line, 50);
+                    return line;
+                }
+            },
+            // Frame 5: Circle (vertical line on left, circle on right)
+            {
+                left: () => {
+                    const line = createLine(100, 50, 100, 150, '#fff', 3);
+                    return line;
+                },
+                right: () => {
+                    const circle = createCircle(100, 100, 50, '#000', 3);
+                    animateLineDraw(circle, 50);
+                    return circle;
+                }
+            },
+            // Frame 6: Perpendicularity (circle on left, horizontal line on right)
+            {
+                left: () => {
+                    const circle = createCircle(100, 100, 50, '#fff', 3);
+                    return circle;
+                },
+                right: () => {
+                    const line = createLine(40, 100, 160, 100, '#000', 3);
+                    animateLineDraw(line, 50);
+                    return line;
+                }
+            },
+            // Frame 7: Direction (horizontal line on left, arrow on right)
+            {
+                left: () => {
+                    const line = createLine(40, 100, 160, 100, '#fff', 3);
+                    return line;
+                },
+                right: () => {
+                    const arrow = createArrow(40, 100, 160, 100, '#000', 3);
+                    arrow.style.opacity = '0';
+                    arrow.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => arrow.style.opacity = '1', 50);
+                    return arrow;
+                }
+            },
+            // Frame 8: Connection (simple link on left, directed link on right)
+            {
+                left: () => {
+                    const conn = createConnection(60, 100, 140, 100, 25, '#fff', 3, false);
+                    conn.style.opacity = '0';
+                    conn.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => conn.style.opacity = '1', 50);
+                    return conn;
+                },
+                right: () => {
+                    const conn = createConnection(60, 100, 140, 100, 25, '#000', 3, true);
+                    conn.style.opacity = '0';
+                    conn.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => conn.style.opacity = '1', 50);
+                    return conn;
+                }
+            },
+            // Frame 9: Typed Link (simple + directed on left, typed link on right)
+            {
+                left: () => {
+                    const group = createSvgElement('g');
+                    const conn1 = createConnection(60, 60, 140, 60, 20, '#fff', 3, false);
+                    const conn2 = createConnection(60, 140, 140, 140, 20, '#fff', 3, true);
+                    group.appendChild(conn1);
+                    group.appendChild(conn2);
+                    group.style.opacity = '0';
+                    group.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => group.style.opacity = '1', 50);
+                    return group;
+                },
+                right: () => {
+                    const typed = createTypedLink(100, 100, 140, '#000', 3);
+                    typed.style.opacity = '0';
+                    typed.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => typed.style.opacity = '1', 50);
+                    return typed;
+                }
+            },
+            // Frame 10: Recursion (nested structure inside circles)
+            {
+                left: () => {
+                    const group = createSvgElement('g');
+                    const conn1 = createConnectionNested(60, 60, 140, 60, 25, '#fff', 3, false, 1);
+                    const conn2 = createConnectionNested(60, 140, 140, 140, 25, '#fff', 3, true, 1);
+                    group.appendChild(conn1);
+                    group.appendChild(conn2);
+                    group.style.opacity = '0';
+                    group.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => group.style.opacity = '1', 50);
+                    return group;
+                },
+                right: () => {
+                    const typed = createTypedLinkNested(100, 100, 140, '#000', 3, 1);
+                    typed.style.opacity = '0';
+                    typed.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => typed.style.opacity = '1', 50);
+                    return typed;
+                }
+            },
+            // Frame 11: Multi-level recursion
+            {
+                left: () => {
+                    const group = createSvgElement('g');
+                    const conn1 = createConnectionNested(60, 60, 140, 60, 25, '#fff', 3, false, 2);
+                    const conn2 = createConnectionNested(60, 140, 140, 140, 25, '#fff', 3, true, 2);
+                    group.appendChild(conn1);
+                    group.appendChild(conn2);
+                    group.style.opacity = '0';
+                    group.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => group.style.opacity = '1', 50);
+                    return group;
+                },
+                right: () => {
+                    const typed = createTypedLinkNested(100, 100, 140, '#000', 3, 2);
+                    typed.style.opacity = '0';
+                    typed.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => typed.style.opacity = '1', 50);
+                    return typed;
+                }
+            },
+            // Frame 12: Colored sequence
+            {
+                left: () => {
+                    const group = createSvgElement('g');
+                    const conn1 = createConnectionColored(60, 60, 140, 60, 25, '#fff', 3, false, 2);
+                    const conn2 = createConnectionColored(60, 140, 140, 140, 25, '#fff', 3, true, 2);
+                    group.appendChild(conn1);
+                    group.appendChild(conn2);
+                    group.style.opacity = '0';
+                    group.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => group.style.opacity = '1', 50);
+                    return group;
+                },
+                right: () => {
+                    const typed = createTypedLinkColored(100, 100, 140, '#000', 3, 2);
+                    typed.style.opacity = '0';
+                    typed.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+                    setTimeout(() => typed.style.opacity = '1', 50);
+                    return typed;
+                }
+            }
+        ];
+
+        let currentFrame = 0;
+
+        function clearSvg(svg) {
+            // Fade out current content
+            const children = Array.from(svg.children);
+            children.forEach(child => {
+                child.style.transition = `opacity ${TRANSITION_DURATION / 2}ms ease-out`;
+                child.style.opacity = '0';
+            });
+
+            // Remove after fade
+            setTimeout(() => {
+                while (svg.firstChild) {
+                    svg.removeChild(svg.firstChild);
+                }
+            }, TRANSITION_DURATION / 2);
+        }
+
+        function showFrame(index) {
+            const frame = frames[index];
+
+            // Clear both SVGs with fade
+            clearSvg(svgLeft);
+            clearSvg(svgRight);
+
+            // Add new content after old content fades
+            setTimeout(() => {
+                const leftContent = frame.left();
+                const rightContent = frame.right();
+
+                if (leftContent) {
+                    svgLeft.appendChild(leftContent);
+                }
+                if (rightContent) {
+                    svgRight.appendChild(rightContent);
+                }
+            }, TRANSITION_DURATION / 2);
+        }
+
+        function nextFrame() {
+            currentFrame = (currentFrame + 1) % frames.length;
+            showFrame(currentFrame);
+        }
+
+        // Start animation
+        function startAnimation() {
+            showFrame(0);
+            setInterval(nextFrame, FRAME_DURATION);
+        }
+
+        // Initialize
+        startAnimation();
+    </script>
+</body>
+</html>
